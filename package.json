@@ -1,8 +1,15 @@
 {
   "name": "agentic-react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "State management framework for React 19 designed for AI-assisted development",
-  "keywords": ["react", "state-management", "ai", "mcp", "agents", "devtools"],
+  "keywords": [
+    "react",
+    "state-management",
+    "ai",
+    "mcp",
+    "agents",
+    "devtools"
+  ],
   "author": "Christian Alfoni",
   "license": "MIT",
   "repository": {
