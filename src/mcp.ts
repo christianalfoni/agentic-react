@@ -61,8 +61,15 @@ export async function startServer() {
   type LogEntry = { timestamp: string; rendered: string; node: ExecutionNode };
   const logs: LogEntry[] = [];
 
-  let browserSocket: WebSocket | null = null;
+  const connections = new Set<WebSocket>();
   const pendingActions = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
+
+  const getSocket = (): WebSocket | null => {
+    for (const ws of connections) {
+      if (ws.readyState === 1 /* OPEN */) return ws;
+    }
+    return null;
+  };
 
   // ─── WebSocket server ─────────────────────────────────────────────────────
 
@@ -71,7 +78,7 @@ export async function startServer() {
 
   wss.on("connection", (ws) => {
     console.error("[devtools-mcp] Browser connected");
-    browserSocket = ws;
+    connections.add(ws);
 
     ws.on("message", (data) => {
       let msg: { type: string; id?: string; data?: unknown; result?: unknown; error?: string; payload?: unknown; success?: boolean };
@@ -123,7 +130,7 @@ export async function startServer() {
 
     ws.on("close", () => {
       console.error("[devtools-mcp] Browser disconnected");
-      if (browserSocket === ws) browserSocket = null;
+      connections.delete(ws);
     });
   });
 
@@ -145,6 +152,9 @@ export async function startServer() {
       limit: z.number().optional().describe("Max number of log entries to return (default: 50)"),
     },
     async ({ limit = 50 }) => {
+      if (!getSocket()) {
+        return { content: [{ type: "text", text: "Error: No app connected. Start your app and make sure it connects to the devtools." }] };
+      }
       const slice = logs.slice(-limit);
       if (slice.length === 0) {
         return { content: [{ type: "text", text: "No logs yet." }] };
@@ -161,6 +171,9 @@ export async function startServer() {
     "Clear all buffered framework logs.",
     {},
     async () => {
+      if (!getSocket()) {
+        return { content: [{ type: "text", text: "Error: No app connected. Start your app and make sure it connects to the devtools." }] };
+      }
       logs.length = 0;
       return { content: [{ type: "text", text: "Logs cleared." }] };
     },
@@ -171,15 +184,15 @@ export async function startServer() {
     "Get a snapshot of the current framework state from the running browser app. Returns all atom values as a JSON object, mirroring the shape of state.ts. asyncAtoms that haven't loaded yet appear as '[pending]'.",
     {},
     async () => {
-      if (!browserSocket || browserSocket.readyState !== 1 /* OPEN */) {
-        return { content: [{ type: "text", text: "Error: No browser connected to devtools." }] };
+      if (!getSocket()) {
+        return { content: [{ type: "text", text: "Error: No app connected. Start your app and make sure it connects to the devtools." }] };
       }
 
       const id = Math.random().toString(36).slice(2);
 
       const result = await new Promise<unknown>((resolve, reject) => {
         pendingActions.set(id, { resolve, reject });
-        browserSocket!.send(JSON.stringify({ type: "get_state", id }));
+        getSocket()!.send(JSON.stringify({ type: "get_state", id }));
         setTimeout(() => {
           if (pendingActions.has(id)) {
             pendingActions.delete(id);
@@ -200,8 +213,8 @@ export async function startServer() {
       payload: z.string().optional().describe("JSON-encoded payload, e.g. '\"my todo title\"' or '{\"id\":\"abc\"}'"),
     },
     async ({ path, payload }) => {
-      if (!browserSocket || browserSocket.readyState !== 1 /* OPEN */) {
-        return { content: [{ type: "text", text: "Error: No browser connected to devtools." }] };
+      if (!getSocket()) {
+        return { content: [{ type: "text", text: "Error: No app connected. Start your app and make sure it connects to the devtools." }] };
       }
 
       const id = Math.random().toString(36).slice(2);
@@ -209,7 +222,7 @@ export async function startServer() {
 
       const result = await new Promise<unknown>((resolve, reject) => {
         pendingActions.set(id, { resolve, reject });
-        browserSocket!.send(JSON.stringify({ type: "trigger_action", id, path, payload: parsedPayload }));
+        getSocket()!.send(JSON.stringify({ type: "trigger_action", id, path, payload: parsedPayload }));
         setTimeout(() => {
           if (pendingActions.has(id)) {
             pendingActions.delete(id);
@@ -234,8 +247,8 @@ export async function startServer() {
       value: z.string().describe("JSON-encoded value to set, e.g. '\"completed\"' or 'true' or '[1,2,3]'"),
     },
     async ({ path, value }) => {
-      if (!browserSocket || browserSocket.readyState !== 1 /* OPEN */) {
-        return { content: [{ type: "text", text: "Error: No browser connected to devtools." }] };
+      if (!getSocket()) {
+        return { content: [{ type: "text", text: "Error: No app connected. Start your app and make sure it connects to the devtools." }] };
       }
 
       const id = Math.random().toString(36).slice(2);
@@ -243,7 +256,7 @@ export async function startServer() {
 
       await new Promise<unknown>((resolve, reject) => {
         pendingActions.set(id, { resolve, reject });
-        browserSocket!.send(JSON.stringify({ type: "set_state", id, path, value: parsedValue }));
+        getSocket()!.send(JSON.stringify({ type: "set_state", id, path, value: parsedValue }));
         setTimeout(() => {
           if (pendingActions.has(id)) {
             pendingActions.delete(id);
