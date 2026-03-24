@@ -1,0 +1,54 @@
+{
+  "name": "agentic-react",
+  "version": "0.1.0",
+  "description": "State management framework for React 19 designed for AI-assisted development",
+  "keywords": ["react", "state-management", "ai", "mcp", "agents", "devtools"],
+  "author": "Christian Alfoni",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/christianalfoni/agentic-react"
+  },
+  "homepage": "https://github.com/christianalfoni/agentic-react#readme",
+  "bugs": {
+    "url": "https://github.com/christianalfoni/agentic-react/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./devtools": {
+      "import": "./dist/devtools.js",
+      "types": "./dist/devtools.d.ts"
+    }
+  },
+  "bin": {
+    "agentic-react": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ws": "^8.18.2",
+    "zod": "^3.25.23"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/ws": "^8.5.14",
+    "react": "^19.2.4",
+    "tsup": "^8.0.0",
+    "typescript": "~5.9.3"
+  }
+}
