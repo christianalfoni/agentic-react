@@ -1,42 +1,92 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
+import { emitKeypressEvents } from "node:readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const AGENTS = [
+  { key: "claude", label: "Claude Code" },
+  { key: "cursor", label: "Cursor" },
+  { key: "opencode", label: "OpenCode" },
+  { key: "gemini", label: "Gemini CLI" },
+  { key: "codex", label: "Codex" },
+] as const;
+
+type AgentKey = (typeof AGENTS)[number]["key"];
+
+async function promptAgentSelection(): Promise<AgentKey | null> {
+  return new Promise((resolve) => {
+    let index = 0;
+    const count = AGENTS.length;
+
+    const render = (first = false) => {
+      if (!first) process.stdout.write(`\x1B[${count}A`);
+      for (let i = 0; i < count; i++) {
+        process.stdout.write(`\r${i === index ? "❯ " : "  "}${AGENTS[i].label}\n`);
+      }
+    };
+
+    process.stdout.write("[agentic-react] Select agent to configure:\n\n");
+    render(true);
+    process.stdout.write("\x1B[?25l"); // hide cursor
+
+    emitKeypressEvents(process.stdin);
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+
+    const onKeypress = (_: unknown, key: { name: string; ctrl?: boolean }) => {
+      if (key.name === "up") {
+        index = (index - 1 + count) % count;
+        render();
+      } else if (key.name === "down") {
+        index = (index + 1) % count;
+        render();
+      } else if (key.name === "return") {
+        cleanup();
+        resolve(AGENTS[index].key);
+      } else if (key.name === "escape" || (key.name === "c" && key.ctrl)) {
+        cleanup();
+        resolve(null);
+      }
+    };
+
+    const cleanup = () => {
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      process.stdin.removeListener("keypress", onKeypress);
+      process.stdin.unref();
+      process.stdout.write("\x1B[?25h\n"); // show cursor
+    };
+
+    process.stdin.on("keypress", onKeypress);
+  });
+}
 
 export async function init() {
   const projectRoot = findProjectRoot();
   const results: string[] = [];
 
-  if (existsSync(join(projectRoot, ".claude"))) {
+  const agent = await promptAgentSelection();
+
+  if (!agent) {
+    console.log("[agentic-react] Cancelled.");
+    return;
+  }
+
+  if (agent === "claude") {
     installClaudeSkills(projectRoot, results);
     configureMcpJson(join(projectRoot, ".mcp.json"), results, "Claude Code");
-  }
-
-  if (existsSync(join(projectRoot, ".cursor"))) {
+  } else if (agent === "cursor") {
     installCursorRules(projectRoot, results);
     configureMcpJson(join(projectRoot, ".cursor", "mcp.json"), results, "Cursor");
-  }
-
-  if (existsSync(join(projectRoot, ".opencode")) || existsSync(join(projectRoot, "opencode.json"))) {
+  } else if (agent === "opencode") {
     installOpenCodeSkills(projectRoot, results);
     configureOpenCode(join(projectRoot, "opencode.json"), results);
-  }
-
-  if (existsSync(join(projectRoot, ".gemini"))) {
+  } else if (agent === "gemini") {
     injectIntoInstructionFile(join(projectRoot, "GEMINI.md"), results, "Gemini CLI");
     configureMcpJson(join(projectRoot, ".gemini", "settings.json"), results, "Gemini CLI");
-  }
-
-  if (existsSync(join(projectRoot, ".codex"))) {
+  } else if (agent === "codex") {
     injectIntoInstructionFile(join(projectRoot, "AGENTS.md"), results, "Codex");
     configureCodex(join(projectRoot, ".codex", "config.toml"), results);
-  }
-
-  if (results.length === 0) {
-    console.log("[agentic-react] No AI coding tools detected (.claude, .cursor, .opencode, .gemini, .codex)");
-    console.log("  Run this from your project root after initializing your AI tool.");
-    return;
   }
 
   console.log("[agentic-react] Setup complete:");
@@ -61,13 +111,14 @@ function findProjectRoot(): string {
 
 function installClaudeSkills(projectRoot: string, results: string[]) {
   const skillsSourceDir = resolve(__dirname, "..", "skills");
-  const skillsDestDir = join(projectRoot, ".claude", "skills", "agentic-react");
-
-  mkdirSync(skillsDestDir, { recursive: true });
 
   for (const skill of ["state-management", "component-composition"]) {
-    copyFileSync(join(skillsSourceDir, `${skill}.md`), join(skillsDestDir, `${skill}.md`));
-    results.push(`  ✓ Claude Code skill: .claude/skills/agentic-react/${skill}.md`);
+    const skillDestDir = join(projectRoot, ".claude", "skills", `agentic-react-${skill}`);
+    mkdirSync(skillDestDir, { recursive: true });
+    const src = readFileSync(join(skillsSourceDir, `${skill}.md`), "utf8");
+    const updated = src.replace(/^(---\nname: )\S+/m, `$1agentic-react-${skill}`);
+    writeFileSync(join(skillDestDir, "SKILL.md"), updated);
+    results.push(`  ✓ Claude Code skill: .claude/skills/agentic-react-${skill}/SKILL.md`);
   }
 }
 

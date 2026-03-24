@@ -182,16 +182,27 @@ export const storage = {
 
 `createApp` is called once with all three modules imported via `* as`:
 
-```ts
+```tsx
+import { createApp } from "agentic-react";
+import { createContext, useContext } from "react";
 import * as state from "./state";
 import * as actions from "./actions";
 import * as effects from "./effects";
 
-const app = createApp({ state, actions, effects, env: { apiUrl: "..." } });
+const app = createApp({ state, actions, effects });
+const AppContext = createContext(app);
+
+export function useApp() {
+  return useContext(AppContext);
+}
 ```
 
-`env` is passed to all effect factories at startup. Add anything effects need
-(API base URLs, config flags, etc.) here.
+`createApp` returns `{ state, actions, setState }` — it does **not** return
+`useApp`. `useApp` is defined manually in `main.tsx` using React context.
+
+`env` is **optional**. Only include it when at least one effect factory actually
+declares an `env` parameter. If no effects need configuration, omit `env`
+entirely — do not pass `env: {}`.
 
 ## Components
 
